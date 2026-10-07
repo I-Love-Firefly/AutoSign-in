@@ -1,0 +1,23 @@
+# Publish only maintained source and API documentation.
+/*
+!/.gitignore
+!/README.md
+!/mobile_app/
+!/docs/
+/docs/*
+!/docs/ac-login-api.md
+/mobile_app/VALIDATION.md
+
+# Local credentials, account archives, signing material and binaries.
+.env
+.env.*
+!.env.example
+*.xmumaccounts
+*.keystore
+*.jks
+*.p12
+*.pem
+*.apk
+*.aab
+key.properties
+local.properties
