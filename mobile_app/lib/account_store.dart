@@ -16,6 +16,10 @@ class SecureAccountStore implements AccountStore {
           storage ??
           const FlutterSecureStorage(
             aOptions: AndroidOptions(resetOnError: false),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.unlocked_this_device,
+              synchronizable: false,
+            ),
           );
   static const key = 'xmum_accounts_v1';
   @override

@@ -60,7 +60,7 @@ class _FlowProgressPageState extends State<FlowProgressPage> {
     Stage.networkChecking: '读取校园网方式并核对账号资料；Student 旧版另查询当前认证账号和接入参数',
     Stage.networkConfiguring: '检查校园网密码、连接识别权限与共用认证设置；Student-5G 使用企业网络认证',
     Stage.networkApproval: '在系统页面确认保存当前学生的 Student-5G 配置；取消时停止，不继续签到',
-    Stage.networkEnterpriseReconnect: '先等待系统自动重连；若弹出 Wi-Fi 设置，请关闭再开启 Wi-Fi、连接 Student-5G 并返回。手动模式需先修改身份和密码；最多等待 3 分钟',
+    Stage.networkEnterpriseReconnect: '先等待系统连接；需要手动操作时打开“设置 → Wi-Fi”，连接 Student-5G 后返回。手动模式需修改身份和密码；最多等待 3 分钟',
     Stage.networkLogout: '读取本机实际在线账号，先解除设备绑定，再注销该账号的网络会话；连续确认离线后才重连',
     Stage.networkReconnect: '关闭再开启 Wi-Fi，重新连接 Student 并返回本页，无需等待“需要登录”提示。应用会通过学校接口连续确认已离线，再登录当前学生；不要在网页手动登录，最多等待 3 分钟',
     Stage.networkLogin: '重新读取当前接入点认证参数、获取挑战值，使用独立校园网密码登录',

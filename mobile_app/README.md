@@ -1,6 +1,8 @@
-# 签到助手 Android 内测版
+# 签到助手 Android / iPhone 内测版
 
 当前版本 0.7.4（内部测试版），Flutter Android，包名 `com.xmum.attendance_assistant`。可覆盖安装并保留本机账号。
+
+新增 iPhone 源码工程（iOS 15+，Bundle ID `com.xmum.attendance-assistant`），功能与安装步骤见 [iOS 适配文档](../docs/ios-adaptation.md)。iOS 账号与课表使用仅在本机解锁时可访问的 Keychain，账号档案与安卓加密格式兼容，可经“文件”选择器或 AirDrop 传输。iPhone Wi-Fi 系统确认使用 PEAP；GTC 或学校描述文件使用手动模式。安卓真机验证记录仅适用于安卓，不代表 iPhone 已验收。
 
 ## 使用
 

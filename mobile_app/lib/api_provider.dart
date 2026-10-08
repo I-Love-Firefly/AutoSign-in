@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cookie_jar/cookie_jar.dart';
+import 'package:flutter/services.dart';
 
 import 'domain.dart';
 
@@ -38,9 +39,16 @@ abstract interface class SessionTransport {
 
 class IsolatedHttpSession implements SessionTransport {
   final Set<String> allowedHosts;
+  final bool _nativeIos;
+  static int _nextSession = 0;
+  final String _sessionId = 'school-${_nextSession++}';
+  static const _channel = MethodChannel('com.xmum.attendance_assistant/http');
+  bool _nativeStarted = false;
   IsolatedHttpSession({
     Set<String> allowedHosts = const {'cas.xmu.edu.my', 'acad.xmu.edu.my'},
-  }) : allowedHosts = Set.unmodifiable(allowedHosts);
+    bool? useNativeIos,
+  }) : allowedHosts = Set.unmodifiable(allowedHosts),
+       _nativeIos = useNativeIos ?? Platform.isIOS;
   final HttpClient _client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 18);
   final CookieJar _cookies = CookieJar();
@@ -86,7 +94,11 @@ class IsolatedHttpSession implements SessionTransport {
         headers,
       ).timeout(const Duration(seconds: 35));
     } on TimeoutException {
+      _closed = true;
       _client.close(force: true);
+      if (_nativeStarted) {
+        await _channel.invokeMethod<void>('close', {'session': _sessionId});
+      }
       throw const AttendanceError('NETWORK_ERROR', '网络请求超时');
     }
   }
@@ -107,20 +119,48 @@ class IsolatedHttpSession implements SessionTransport {
           allowedHosts.contains(uri.host))) {
         throw AttendanceError('UNEXPECTED_REDIRECT', blockedAddressReason(uri));
       }
-      final request = await _client.openUrl(method, uri);
-      request.followRedirects = false;
-      request.headers.set('Accept', 'application/json, text/plain, */*');
-      request.headers.set('User-Agent', 'XMUMAttendanceAssistant/0.2 Android');
-      headers.forEach(request.headers.set);
-      request.cookies.addAll(await _cookies.loadForRequest(uri));
-      if (body != null) {
-        request.write(body);
+      late final int status;
+      late final String text;
+      String? location;
+      if (_nativeIos) {
+        _nativeStarted = true;
+        try {
+          final reply = await _channel.invokeMapMethod<String, dynamic>(
+            'send',
+            {
+              'session': _sessionId,
+              'url': uri.toString(),
+              'method': method,
+              'body': body,
+              'headers': headers,
+              'allowedHosts': allowedHosts.toList(),
+              'wifiOnly': allowedHosts.contains('acad.xmu.edu.my'),
+            },
+          );
+          if (reply?['status'] is! int || reply?['body'] is! String) {
+            throw const AttendanceError('SCHEMA_CHANGED', '网络响应格式不受支持');
+          }
+          status = reply!['status'] as int;
+          text = reply['body'] as String;
+          location = reply['location'] as String?;
+        } on PlatformException catch (e) {
+          throw AttendanceError(e.code, e.message ?? '学校网络请求失败');
+        }
+      } else {
+        final request = await _client.openUrl(method, uri);
+        request.followRedirects = false;
+        request.headers.set('Accept', 'application/json, text/plain, */*');
+        request.headers.set('User-Agent', 'XMUMAttendanceAssistant/0.8');
+        headers.forEach(request.headers.set);
+        request.cookies.addAll(await _cookies.loadForRequest(uri));
+        if (body != null) request.write(body);
+        final response = await request.close();
+        await _cookies.saveFromResponse(uri, response.cookies);
+        text = await utf8.decoder.bind(response).join();
+        status = response.statusCode;
+        location = response.headers.value(HttpHeaders.locationHeader);
       }
-      final response = await request.close();
-      await _cookies.saveFromResponse(uri, response.cookies);
-      final text = await utf8.decoder.bind(response).join();
-      if (const [301, 302, 303, 307, 308].contains(response.statusCode)) {
-        final location = response.headers.value(HttpHeaders.locationHeader);
+      if (const [301, 302, 303, 307, 308].contains(status)) {
         if (location == null) {
           throw const AttendanceError('SCHEMA_CHANGED', '登录跳转缺少目标地址');
         }
@@ -129,7 +169,7 @@ class IsolatedHttpSession implements SessionTransport {
         if (method != 'GET' || next.host != uri.host) {
           headers = {};
         }
-        if (method != 'GET' && const [307, 308].contains(response.statusCode)) {
+        if (method != 'GET' && const [307, 308].contains(status)) {
           throw const AttendanceError(
             'UNEXPECTED_REDIRECT',
             '服务器要求重发登录或提交数据，已停止自动重发',
@@ -140,10 +180,10 @@ class IsolatedHttpSession implements SessionTransport {
         uri = next;
         continue;
       }
-      if (response.statusCode >= 500) {
+      if (status >= 500) {
         throw const AttendanceError('SERVICE_UNAVAILABLE', '学校服务暂时不可用');
       }
-      return HttpReply(response.statusCode, text);
+      return HttpReply(status, text);
     }
     throw const AttendanceError('AUTH_FAILED', '登录跳转次数过多');
   }
@@ -153,6 +193,9 @@ class IsolatedHttpSession implements SessionTransport {
     _closed = true;
     _client.close(force: true);
     await _cookies.deleteAll();
+    if (_nativeStarted) {
+      await _channel.invokeMethod<void>('close', {'session': _sessionId});
+    }
   }
 }
 

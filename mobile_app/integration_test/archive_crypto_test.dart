@@ -6,13 +6,27 @@ import 'package:integration_test/integration_test.dart';
 import 'package:attendance_assistant/domain.dart';
 import 'package:attendance_assistant/portable_archive.dart';
 
+import 'archive_interop_fixture.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('native platform decrypts independent cross-platform vector', (
+    tester,
+  ) async {
+    final plaintext = await NativeArchiveBridge().decrypt(
+      Uint8List.fromList(utf8.encode(archiveInteropJson)),
+      archiveInteropPassword,
+    );
+    expect(utf8.decode(plaintext), archiveInteropPlaintext);
+    final account = PortableAccounts.decode(plaintext).single;
+    expect(account.networkPassword, 'wifi-only');
+    expect(account.acPassword, 'ac-only');
+  });
 
   testWidgets(
     'native archive encryption survives transfer and rejects tampering',
     (tester) async {
-      final bridge = AndroidArchiveBridge();
+      final bridge = NativeArchiveBridge();
       final payload = PortableAccounts.encode([
         const Account('虚构测试账号', 'DUMMY-001', 'not-a-real-password'),
       ]);
@@ -54,27 +68,26 @@ void main() {
       );
     },
   );
-  testWidgets(
-    'Android document picker saves and opens encrypted test archive',
-    (tester) async {
-      final bridge = AndroidArchiveBridge();
-      final payload = PortableAccounts.encode([
-        const Account('文件选择器测试', 'DUMMY-FILE-001', 'fictional-password'),
-      ]);
-      const passphrase = 'offline-transfer-passphrase-123';
-      final encrypted = await bridge.encrypt(payload, passphrase);
-      final saved = await bridge.save(
-        encrypted,
-        'xmum-transfer-test.xmumaccounts',
-      );
-      expect(saved, isTrue);
-      final picked = await bridge.open();
-      expect(picked, isNotNull);
-      final decrypted = await bridge.decrypt(picked!, passphrase);
-      expect(
-        PortableAccounts.decode(decrypted).single.campusId,
-        'DUMMY-FILE-001',
-      );
-    },
-  );
+  testWidgets('mobile document picker saves and opens encrypted test archive', (
+    tester,
+  ) async {
+    final bridge = NativeArchiveBridge();
+    final payload = PortableAccounts.encode([
+      const Account('文件选择器测试', 'DUMMY-FILE-001', 'fictional-password'),
+    ]);
+    const passphrase = 'offline-transfer-passphrase-123';
+    final encrypted = await bridge.encrypt(payload, passphrase);
+    final saved = await bridge.save(
+      encrypted,
+      'xmum-transfer-test.xmumaccounts',
+    );
+    expect(saved, isTrue);
+    final picked = await bridge.open();
+    expect(picked, isNotNull);
+    final decrypted = await bridge.decrypt(picked!, passphrase);
+    expect(
+      PortableAccounts.decode(decrypted).single.campusId,
+      'DUMMY-FILE-001',
+    );
+  });
 }
