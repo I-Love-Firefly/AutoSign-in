@@ -30,7 +30,7 @@ const stageLabels = {
   Stage.idle: '等待选择账号',
   Stage.networkChecking: '检查校园网认证状态',
   Stage.networkLogout: '注销当前校园网账号',
-  Stage.networkReconnect: '等待忽略并重连 Student Wi-Fi',
+  Stage.networkReconnect: '等待重连并重新认证 Student Wi-Fi',
   Stage.networkLogin: '登录学生校园网账号',
   Stage.networkVerifying: '核验校园网账号',
   Stage.authenticating: '初始化 CAS 登录会话',

@@ -55,8 +55,8 @@ class _FlowProgressPageState extends State<FlowProgressPage> {
   ];
   static const _details = {
     Stage.networkChecking: '通过 Wi-Fi 查询当前认证账号、设备地址和接入点认证参数',
-    Stage.networkLogout: '注销并解绑当前设备，确认已离线',
-    Stage.networkReconnect: '在 WLAN 设置中忽略/删除 Student，再重新连接；出现“需要登录”后返回本页，不要在网页手动登录。仅显示“已连接”不算完成；最多等待 3 分钟',
+    Stage.networkLogout: '读取本机实际在线账号，先解除设备绑定，再注销该账号的网络会话；连续确认离线后才重连',
+    Stage.networkReconnect: '关闭再开启 Wi-Fi，重新连接 Student 并返回本页，无需等待“需要登录”提示。应用会通过学校接口连续确认已离线，再登录当前学生；不要在网页手动登录，最多等待 3 分钟',
     Stage.networkLogin: '重新读取当前接入点认证参数、获取挑战值，使用独立校园网密码登录',
     Stage.networkVerifying: '确认在线账号与所选学生一致，再开始教务登录',
     Stage.authenticating: 'GET /lyuapServer/login · 建立 CAS Cookie',

@@ -21,11 +21,13 @@ class PortalFake implements CampusTransport {
       failReconnectedConfig = false;
   bool reconnected = false, basTimeout = false;
   String? logoutError;
+  String? normalLogoutError, logoutOwner;
+  String domain = '';
+  bool ipAlreadyOnline = false;
   List<String> accountIps = [];
   final offlineSequence = <String?>[];
   bool logoutSent = false, wrongPollingIp = false;
   bool macAuth = true;
-  bool dmOfflineAck = false;
   String? queryRejectMessage;
   @override
   Future<String> bind() async => '10.72.88.93';
@@ -70,6 +72,7 @@ class PortalFake implements CampusTransport {
           if (reported == null) 'client_ip': reportedIp,
           if (reported != null) 'online_ip': reportedIp,
           'user_name': reported,
+          'domain': domain,
         };
       case '/v1/srun_portal_online':
         expectSync(p['user_name'], 'example');
@@ -87,17 +90,21 @@ class PortalFake implements CampusTransport {
         expectSync(p['username'], user ?? 'example');
         expectSync(p['unbind'], '1');
         if (logoutError != null) return {'error': logoutError};
+        logoutOwner = user;
         logoutSent = true;
-        if (user == null && dmOfflineAck) return {'error': 'not_online_error'};
-        if (!stuck) user = null;
+        // Model the bug: MAC unbind does not itself close the AC session.
         return {'error': 'ok'};
       case '/cgi-bin/get_challenge':
         return {'challenge': '0123456789abcdef'};
       default:
         if (p['action'] == 'logout') {
-          expectSync(p['username'], user ?? 'example');
+          expectSync(
+            p['username'],
+            '${logoutOwner ?? user}${domain.isEmpty ? '' : '@$domain'}',
+          );
           expectSync(p['ip'], '10.72.88.93');
           expectSync(p['ac_id'], acId);
+          if (normalLogoutError != null) return {'error': normalLogoutError};
           if (logoutError != null) return {'error': logoutError};
           logoutSent = true;
           if (!stuck) user = null;
@@ -107,6 +114,9 @@ class PortalFake implements CampusTransport {
         expectSync(p['ip'], activeIp);
         expectSync(p['info'], startsWith('{SRBX1}'));
         expectSync(p.values, isNot(contains('password')));
+        if (ipAlreadyOnline) {
+          return {'error': 'ok', 'suc_msg': 'ip_already_online_error'};
+        }
         if (basTimeout) {
           return {
             'error': 'login_error',
@@ -130,6 +140,64 @@ void main() {
     'example',
     'cas-secret',
     networkPassword: 'password',
+  );
+  test(
+    'A to B unbind and AC logout both use actual A, including its domain',
+    () async {
+      final t = PortalFake()..domain = 'student';
+      await CampusNetwork(
+        t,
+        pollInterval: Duration.zero,
+      ).switchAccount(account, (_) {});
+      final dm = t.requests.singleWhere(
+        (p) => p['path'] == '/cgi-bin/rad_user_dm',
+      );
+      final logout = t.requests.singleWhere((p) => p['action'] == 'logout');
+      expect(dm['username'], 'previous');
+      expect(logout['username'], 'previous@student');
+      expect(dm['ip'], logout['ip']);
+      expect(t.user, 'example');
+    },
+  );
+  test('already-offline response cannot acknowledge unbinding an observed online A', () async {
+    final t = PortalFake()..logoutError = 'not_online_error';
+    await expectLater(
+      CampusNetwork(
+        t,
+        pollInterval: Duration.zero,
+      ).switchAccount(account, (_) {}),
+      throwsA(
+        isA<AttendanceError>().having(
+          (e) => e.code,
+          'code',
+          'NETWORK_UNBIND_NOT_CONFIRMED',
+        ),
+      ),
+    );
+    expect(t.calls, isNot(contains('reconnect')));
+    expect(t.requests.where((p) => p['action'] == 'login'), isEmpty);
+  });
+  test(
+    'IP-already-online success envelope is not credited as B login success',
+    () async {
+      final t = PortalFake()..ipAlreadyOnline = true;
+      final stages = <Stage>[];
+      await expectLater(
+        CampusNetwork(
+          t,
+          pollInterval: Duration.zero,
+        ).switchAccount(account, stages.add),
+        throwsA(
+          isA<AttendanceError>().having(
+            (e) => e.code,
+            'code',
+            'NETWORK_IP_ALREADY_ONLINE',
+          ),
+        ),
+      );
+      expect(stages, isNot(contains(Stage.networkVerifying)));
+      expect(t.user, isNull);
+    },
   );
   test('encoding matches current portal JS vector', () {
     expect(
@@ -162,6 +230,7 @@ void main() {
       '/cgi-bin/rad_user_info',
       'portal',
       '/cgi-bin/rad_user_dm',
+      '/cgi-bin/srun_portal',
       '/cgi-bin/rad_user_info',
       '/cgi-bin/rad_user_info',
       'reconnect',
@@ -186,20 +255,17 @@ void main() {
     expect(t.calls, isEmpty);
   });
   test(
-    'MacAuth unbinds the selected current IP even if status is already offline',
+    'already-offline device never substitutes target B for unknown old A',
     () async {
-      final t = PortalFake()
-        ..user = null
-        ..dmOfflineAck = true;
+      final t = PortalFake()..user = null;
       await CampusNetwork(
         t,
         pollInterval: Duration.zero,
       ).switchAccount(account, (_) {});
-      final unbind = t.requests.singleWhere(
+      final unbind = t.requests.where(
         (p) => p['path'] == '/cgi-bin/rad_user_dm',
       );
-      expect(unbind['username'], 'example');
-      expect(unbind['ip'], '10.72.88.93');
+      expect(unbind, isEmpty);
       expect(t.requests.where((p) => p['action'] == 'logout'), isEmpty);
     },
   );
@@ -257,9 +323,16 @@ void main() {
         t,
         pollInterval: Duration.zero,
       ).switchAccount(account, (_) {}),
-      throwsA(isA<AttendanceError>()),
+      throwsA(
+        isA<AttendanceError>().having(
+          (e) => e.code,
+          'code',
+          'NETWORK_RECONNECTED_ONLINE',
+        ),
+      ),
     );
     expect(t.calls, isNot(contains('/cgi-bin/get_challenge')));
+    expect(t.user, 'other');
   });
   test('already-online response stops instead of guessing delay', () async {
     final t = PortalFake()..alreadyOnlineResponses = 2;
@@ -274,7 +347,7 @@ void main() {
     expect(t.user, isNull);
   });
   test(
-    'offline device explicitly logs out and verifies before login',
+    'offline device verifies without logging out the target account',
     () async {
       final t = PortalFake()..user = null;
       final stages = <Stage>[];
@@ -292,7 +365,7 @@ void main() {
       expect(t.calls.take(4), [
         '/cgi-bin/rad_user_info',
         'portal',
-        '/cgi-bin/rad_user_dm',
+        '/cgi-bin/rad_user_info',
         '/cgi-bin/rad_user_info',
       ]);
     },
@@ -307,7 +380,7 @@ void main() {
       throwsA(isA<AttendanceError>()),
     );
     expect(t.calls, isNot(contains('/cgi-bin/get_challenge')));
-    expect(t.calls, isNot(contains('/cgi-bin/srun_portal')));
+    expect(t.requests.where((p) => p['action'] == 'login'), isEmpty);
   });
   test('wrong identity and rejected password stop flow', () async {
     for (final t in [
@@ -323,33 +396,30 @@ void main() {
       );
     }
   });
-  test(
-    'logout rejection is checked even when IP status says offline',
-    () async {
-      for (final t in [
-        PortalFake()..logoutError = 'sign_error',
-        PortalFake()
-          ..user = null
-          ..logoutError = 'logout_error',
-      ]) {
-        await expectLater(
-          CampusNetwork(
-            t,
-            pollInterval: Duration.zero,
-          ).switchAccount(account, (_) {}),
-          throwsA(
-            isA<AttendanceError>().having(
-              (e) => e.code,
-              'code',
-              'NETWORK_LOGOUT',
-            ),
+  test('unbind and normal logout rejection both stop before reconnect or B credentials', () async {
+    for (final t in [
+      PortalFake()..logoutError = 'sign_error',
+      PortalFake()..normalLogoutError = 'logout_error',
+    ]) {
+      await expectLater(
+        CampusNetwork(
+          t,
+          pollInterval: Duration.zero,
+        ).switchAccount(account, (_) {}),
+        throwsA(
+          isA<AttendanceError>().having(
+            (e) => e.code,
+            'code',
+            t.logoutError != null
+                ? 'NETWORK_UNBIND_NOT_CONFIRMED'
+                : 'NETWORK_LOGOUT',
           ),
-        );
-        expect(t.calls, isNot(contains('reconnect')));
-        expect(t.calls, isNot(contains('/cgi-bin/get_challenge')));
-      }
-    },
-  );
+        ),
+      );
+      expect(t.calls, isNot(contains('reconnect')));
+      expect(t.calls, isNot(contains('/cgi-bin/get_challenge')));
+    }
+  });
   test(
     'logout requires consecutive matching-IP offline confirmations',
     () async {
@@ -359,7 +429,7 @@ void main() {
         t,
         pollInterval: Duration.zero,
       ).switchAccount(account, (_) {});
-      final logoutIndex = t.calls.indexOf('/cgi-bin/rad_user_dm');
+      final logoutIndex = t.calls.indexOf('/cgi-bin/srun_portal');
       expect(
         t.calls.sublist(logoutIndex + 1, t.calls.indexOf('reconnect')),
         List.filled(4, '/cgi-bin/rad_user_info'),
@@ -476,7 +546,6 @@ void main() {
   );
   test('reconnect refreshes AC and NAS in login payload and checksum', () async {
     final t = PortalFake()
-      ..user = null
       ..macAuth = false
       ..changeIp = true
       ..reconnectedAcId = '2'

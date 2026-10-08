@@ -25,6 +25,12 @@ void main() {
         });
         expect(status['client_ip'] ?? status['online_ip'], ip);
         expect(status['error'], anyOf('ok', 'not_online_error'));
+        if (const bool.fromEnvironment('EXPECT_CAMPUS_OFFLINE')) {
+          expect(status['error'], 'not_online_error');
+          debugPrint(
+            'After A logout and Wi-Fi reconnect: device remains offline; A did not auto-login',
+          );
+        }
         final config = CampusPortalConfig.parse(
           await transport.portalPage(),
           ip,

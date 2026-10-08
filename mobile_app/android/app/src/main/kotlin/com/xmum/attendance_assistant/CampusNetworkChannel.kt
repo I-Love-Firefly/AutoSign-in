@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.content.Intent
 import android.provider.Settings
+import android.os.Build
 import android.widget.Toast
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
@@ -114,8 +115,8 @@ class CampusNetworkChannel(private val activity: Activity, messenger: BinaryMess
                             wifi = null
                             ip = null
                             activity.runOnUiThread {
-                                Toast.makeText(activity, "请忽略 Student 后重新连接；出现需要登录后返回签到助手，不要在网页手动登录", Toast.LENGTH_LONG).show()
-                                activity.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                                Toast.makeText(activity, "请关闭再开启 Wi-Fi 并连接 Student，再返回签到助手；无需等待需要登录提示，不要在网页手动登录", Toast.LENGTH_LONG).show()
+                                activity.startActivity(Intent(if (Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_WIFI else Settings.ACTION_WIFI_SETTINGS))
                             }
                             val deadline = android.os.SystemClock.elapsedRealtime() + 180000L
                             val gate = FreshWifiGate(previous.networkHandle)
@@ -141,7 +142,7 @@ class CampusNetworkChannel(private val activity: Activity, messenger: BinaryMess
                                 }
                                 Thread.sleep(250)
                             }
-                            require(selected != null && address != null) { "未检测到 Student 重新进入需要登录状态。请在 WLAN 设置中忽略 Student，再重新连接并返回应用；仅显示已连接不算完成" }
+                            require(selected != null && address != null) { "未检测到稳定的新 Wi-Fi 连接。请关闭再开启 Wi-Fi、连接 Student 并返回应用；无需等待需要登录提示，应用会通过学校接口复核账号已离线" }
                             require(address!!.startsWith("10.")) { "重连后网络不属于已核验的校园网络，请选择 Student" }
                             require(manager.bindProcessToNetwork(selected)) { "无法固定请求到重连后的 Wi-Fi" }
                             wifi = selected

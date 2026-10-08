@@ -388,48 +388,70 @@ class CampusNetwork {
     if (current['error'] != 'ok' && current['error'] != 'not_online_error') {
       throw const AttendanceError('NETWORK_STATUS', '校园网状态异常，无法确认已离线');
     }
-    final username = current['error'] == 'ok'
-        ? current['user_name']
-        : account.campusId;
-    if (username is! String || username.isEmpty) {
-      throw const AttendanceError('NETWORK_IDENTITY', '无法识别当前校园网账号，已停止切换');
-    }
-    if (config.macAuth) {
-      final time = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
-      final sign = sha1
-          // The literal 1 here is the unbind flag, not an AC identifier.
-          .convert(utf8.encode('$time$username${ip}1$time'))
-          .toString();
-      final logout = await transport.get('/cgi-bin/rad_user_dm', {
-        'username': username,
-        'ip': ip,
-        'time': time,
-        'unbind': '1',
-        'sign': sign,
-      });
-      _checkLogout(logout);
-      current = await _wait(ip, false);
-    } else {
+    if (current['error'] == 'ok') {
+      final username = current['user_name'];
+      if (username is! String || username.isEmpty) {
+        throw const AttendanceError('NETWORK_IDENTITY', '无法识别当前校园网账号，已停止切换');
+      }
+      final domain = current['domain'];
+      if (domain != null && domain is! String) {
+        throw const AttendanceError('NETWORK_IDENTITY', '当前校园网账号的域信息无法核验');
+      }
+      if (config.macAuth) {
+        final time = (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+        final sign = sha1
+            // The literal 1 here is the unbind flag, not an AC identifier.
+            .convert(utf8.encode('$time$username${ip}1$time'))
+            .toString();
+        final logout = await transport.get('/cgi-bin/rad_user_dm', {
+          'username': username,
+          'ip': ip,
+          'time': time,
+          'unbind': '1',
+          'sign': sign,
+        });
+        if (logout['error'] != 'ok') {
+          throw const AttendanceError(
+            'NETWORK_UNBIND_NOT_CONFIRMED',
+            '学校未确认当前账号的设备绑定已解除，已停止；不会使用目标学生账号代替当前账号注销',
+          );
+        }
+      }
+      // MAC unbind acknowledgement alone is not the AC/BAS logout. Both
+      // requests target the actual account read from this phone's online state.
+      final fullUsername = domain is String && domain.isNotEmpty
+          ? '$username@$domain'
+          : username;
       final logout = await transport.get('/cgi-bin/srun_portal', {
         'action': 'logout',
-        'username': username,
+        'username': fullUsername,
         'ip': ip,
         'ac_id': config.acId,
       });
       _checkLogout(logout);
-      current = await _wait(ip, false);
     }
+    // If already offline, there is no verified current account to mutate.
+    // In particular, B must never be substituted for an unknown old account A.
+    current = await _wait(ip, false);
     if (current['error'] != 'not_online_error') {
       throw const AttendanceError('NETWORK_STATUS', '校园网状态异常，无法确认已离线');
     }
     progress(Stage.networkReconnect);
+    // Native reconnect confirms only a fresh stable Wi-Fi link. Android's
+    // captive-portal prompt is not proof of the school's authentication state.
     ip = await transport.reconnect();
     current = await status(ip);
     _checkAddress(current, ip);
     if (current['error'] != 'not_online_error') {
-      throw const AttendanceError(
+      final actual = current['user_name'];
+      final safeAccount =
+          actual is String &&
+              RegExp(r'^[A-Za-z0-9@._-]{1,100}$').hasMatch(actual)
+          ? '（$actual）'
+          : '';
+      throw AttendanceError(
         'NETWORK_RECONNECTED_ONLINE',
-        '重连后设备仍存在校园网会话，请在校园网认证页面注销后重新开始',
+        '重连后仍有校园网账号$safeAccount在线，旧会话或设备绑定尚未清除，已停止；不会继续登录目标账号或提交签到',
       );
     }
     await _wait(ip, false);
@@ -500,6 +522,13 @@ class CampusNetwork {
       'nas_ip': config.nasIp,
       'double_stack': '0',
     });
+    if (result['error'] == 'ok' &&
+        result['suc_msg'] == 'ip_already_online_error') {
+      throw const AttendanceError(
+        'NETWORK_IP_ALREADY_ONLINE',
+        '学校返回当前 IP 已在线，没有确认目标账号登录成功，已停止；请核验旧账号会话',
+      );
+    }
     if (result['error'] != 'ok') {
       final error = '${result['error'] ?? 'unknown'}';
       final safe = RegExp(r'^[a-zA-Z0-9_-]{1,80}$').hasMatch(error)

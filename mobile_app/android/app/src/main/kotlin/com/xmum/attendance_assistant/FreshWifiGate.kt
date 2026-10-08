@@ -7,11 +7,10 @@ data class WifiResetCandidate(
     val validated: Boolean,
 )
 
-/** A link alone is insufficient: a fresh connection must request authentication. */
+/** Confirms only a fresh stable link. Dart must verify SRun offline before login. */
 class FreshWifiGate(private val previousId: Long) {
     private var settingsVisited = false
     private var previousLost = false
-    private var portalId: Long? = null
     private var readyKey: Pair<Long, String>? = null
     private var readySince = 0L
 
@@ -21,15 +20,12 @@ class FreshWifiGate(private val previousId: Long) {
         val candidate = candidates.filter { it.id != previousId }.singleOrNull()?.takeIf { it.ipv4?.startsWith("10.") == true }
         if (candidate == null) {
             readyKey = null
-            portalId = null
             return null
         }
-        if (portalId != candidate.id) portalId = null
-        if (candidate.captivePortal && !candidate.validated) portalId = candidate.id
-        // Remember the observed sign-in requirement even if Android's later
-        // connectivity probe becomes validated. School account state is checked
-        // separately before sending credentials.
-        if (!settingsVisited || !previousLost || !appFocused || candidates.size != 1 || portalId != candidate.id) {
+        // Android captive-portal/validation flags are connectivity probe results,
+        // not the authoritative campus account state. Some classroom networks
+        // validate while SRun explicitly reports this device offline.
+        if (!settingsVisited || !previousLost || !appFocused || candidates.size != 1) {
             readyKey = null
             return null
         }
