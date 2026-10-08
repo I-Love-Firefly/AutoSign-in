@@ -45,4 +45,39 @@ class RunnerTests: XCTestCase {
     XCTAssertThrowsError(try AccountArchiveCrypto.decrypt(JSONSerialization.data(withJSONObject: archive), password: fixture["password"]!))
   }
 
+  @MainActor
+  func testClosedSessionStopsBeforeSendingAfterWiFiCheck() async throws {
+    let gate = SuspendedBinding()
+    let http = SchoolHTTP(wifi: gate)
+    let request = Task {
+      try await http.send(id: "cancel-test", url: URL(string: "https://acad.xmu.edu.my/")!,
+                          method: "POST", body: "fictional-test-only", headers: [:],
+                          hosts: ["acad.xmu.edu.my"], wifiOnly: true)
+    }
+    await fulfillment(of: [gate.entered], timeout: 3)
+    let continuation = try XCTUnwrap(gate.continuation)
+    http.close("cancel-test")
+    continuation.resume(returning: WiFiSnapshot(ip: "10.0.0.1", ssid: "Student-5G",
+                                                bssid: "test-only", enterprise: true, generation: 1))
+    do {
+      _ = try await request.value
+      XCTFail("A closed session must stop before starting the POST")
+    } catch let error as SchoolError {
+      XCTAssertEqual(error.code, "NETWORK_ERROR")
+      XCTAssertEqual(error.message, "网络会话已关闭，流程已停止")
+    }
+  }
+
+}
+
+@MainActor
+private final class SuspendedBinding: SchoolBindingChecking {
+  let entered = XCTestExpectation(description: "Wi-Fi check suspended")
+  var continuation: CheckedContinuation<WiFiSnapshot, Error>?
+  func checkBinding() async throws -> WiFiSnapshot {
+    try await withCheckedThrowingContinuation { continuation in
+      self.continuation = continuation
+      entered.fulfill()
+    }
+  }
 }

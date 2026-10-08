@@ -18,11 +18,11 @@ final class SchoolHTTP {
     let wifiOnly: Bool
   }
   private let delegate = StopRedirects()
-  private let wifi: SchoolWiFi
+  private let wifi: any SchoolBindingChecking
   private var sessions: [String: Session] = [:]
   private let schoolHosts: Set<String> = ["cas.xmu.edu.my", "acad.xmu.edu.my", "ac.xmu.edu.my", "srun.xmu.edu.my"]
 
-  init(wifi: SchoolWiFi) { self.wifi = wifi }
+  init(wifi: any SchoolBindingChecking) { self.wifi = wifi }
 
   func close(_ id: String) {
     guard let session = sessions.removeValue(forKey: id) else { return }

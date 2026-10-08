@@ -22,9 +22,14 @@ struct WiFiSnapshot: Equatable {
   }
 }
 
+@MainActor
+protocol SchoolBindingChecking {
+  func checkBinding() async throws -> WiFiSnapshot
+}
+
 // All mutable state is confined to the main queue. No GPS coordinates are read.
 @MainActor
-final class SchoolWiFi: NSObject, CLLocationManagerDelegate {
+final class SchoolWiFi: NSObject, CLLocationManagerDelegate, SchoolBindingChecking {
   private let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
   private let location = CLLocationManager()
   private var generation = 1
