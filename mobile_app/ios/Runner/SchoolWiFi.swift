@@ -42,14 +42,19 @@ final class SchoolWiFi: NSObject, CLLocationManagerDelegate {
     super.init()
     location.delegate = self
     monitor.pathUpdateHandler = { [weak self] path in
-      guard let self = self else { return }
-      if let old = self.lastPathStatus, old != path.status { self.generation += 1 }
-      self.lastPathStatus = path.status
+      let status = path.status
+      Task { @MainActor [weak self] in
+        guard let self = self else { return }
+        if let old = self.lastPathStatus, old != status { self.generation += 1 }
+        self.lastPathStatus = status
+      }
     }
     monitor.start(queue: .main)
     backgroundObserver = NotificationCenter.default.addObserver(
       forName: UIScene.didEnterBackgroundNotification, object: nil, queue: .main
-    ) { [weak self] _ in self?.backgroundCount += 1 }
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in self?.backgroundCount += 1 }
+    }
   }
 
   deinit {
@@ -88,7 +93,9 @@ final class SchoolWiFi: NSObject, CLLocationManagerDelegate {
       }
       permissionResult = result
       permissionTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: false) { [weak self] _ in
-        self?.finishPermission(SchoolError(code: "ENTERPRISE_PERMISSION", message: "权限确认超时，请重试").flutter)
+        Task { @MainActor [weak self] in
+          self?.finishPermission(SchoolError(code: "ENTERPRISE_PERMISSION", message: "权限确认超时，请重试").flutter)
+        }
       }
       location.requestWhenInUseAuthorization()
     default:

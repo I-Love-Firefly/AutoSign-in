@@ -33,7 +33,13 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Compile unsigned simulator app
-        run: flutter build ios --simulator --debug
+        run: |
+          if ! flutter build ios --simulator --debug --verbose > "$RUNNER_TEMP/ios-build.log" 2>&1; then
+            python3 -c 'import os,re; p=os.environ["RUNNER_TEMP"]+"/ios-build.log"; print("\n".join(x.rstrip() for x in open(p) if re.search(r"error:|Error \(Xcode\):|warning:|\.swift:[0-9]+",x)))'
+            tail -n 40 "$RUNNER_TEMP/ios-build.log"
+            exit 1
+          fi
+          tail -n 15 "$RUNNER_TEMP/ios-build.log"
       - name: Test native archive compatibility on simulator
         run: |
           SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for v in d["devices"].values() for x in v if x["name"].startswith("iPhone")))')
