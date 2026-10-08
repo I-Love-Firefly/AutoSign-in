@@ -46,3 +46,20 @@ jobs:
           xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             CODE_SIGNING_ALLOWED=NO
+      - name: Compile unsigned iPhone package
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p build/ios/unsigned/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/unsigned/Payload/
+          cd build/ios/unsigned
+          zip -qry ../AutoSign-in-iPhone-unsigned.ipa Payload
+          cp ../../../ios/Runner/Runner.entitlements ../Required-entitlements.plist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iPhone-unsigned-needs-developer-signing
+          path: |
+            mobile_app/build/ios/AutoSign-in-iPhone-unsigned.ipa
+            mobile_app/build/ios/Required-entitlements.plist
+            docs/windows-iphone-install.md
+          if-no-files-found: error
+          retention-days: 14

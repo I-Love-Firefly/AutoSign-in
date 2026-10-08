@@ -29,6 +29,8 @@
 
 ## 在 Mac 上编译并安装
 
+只有 Windows 的使用者可由 GitHub Actions 云端编译，获取未签名真机 IPA；普通 Apple 账号无法为本应用配置两项 Wi-Fi 能力，完整使用需开发团队签名或 TestFlight。详细步骤见 [Windows 获取和安装 iPhone 版](windows-iphone-install.md)。
+
 1. 安装 Flutter 3.47.4（Dart 3.13.3）或满足 `pubspec.lock` 的兼容版本、Xcode 及 iOS 开发组件。
 2. 在仓库 `mobile_app` 目录运行：
 

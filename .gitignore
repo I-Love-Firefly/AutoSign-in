@@ -8,6 +8,7 @@
 /docs/*
 !/docs/ac-login-api.md
 !/docs/ios-adaptation.md
+!/docs/windows-iphone-install.md
 /mobile_app/VALIDATION.md
 
 # Local credentials, account archives, signing material and binaries.
