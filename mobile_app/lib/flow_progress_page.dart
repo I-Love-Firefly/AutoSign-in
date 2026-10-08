@@ -34,6 +34,9 @@ class _FlowProgressPageState extends State<FlowProgressPage> {
   final ScrollController _scroll = ScrollController();
   static const _order = [
     Stage.networkChecking,
+    Stage.networkConfiguring,
+    Stage.networkApproval,
+    Stage.networkEnterpriseReconnect,
     Stage.networkLogout,
     Stage.networkReconnect,
     Stage.networkLogin,
@@ -54,7 +57,10 @@ class _FlowProgressPageState extends State<FlowProgressPage> {
     Stage.cleaning,
   ];
   static const _details = {
-    Stage.networkChecking: '通过 Wi-Fi 查询当前认证账号、设备地址和接入点认证参数',
+    Stage.networkChecking: '读取校园网方式并核对账号资料；Student 旧版另查询当前认证账号和接入参数',
+    Stage.networkConfiguring: '检查校园网密码、连接识别权限与共用认证设置；Student-5G 使用企业网络认证',
+    Stage.networkApproval: '在系统页面确认保存当前学生的 Student-5G 配置；取消时停止，不继续签到',
+    Stage.networkEnterpriseReconnect: '先等待系统自动重连；若弹出 Wi-Fi 设置，请关闭再开启 Wi-Fi、连接 Student-5G 并返回。手动模式需先修改身份和密码；最多等待 3 分钟',
     Stage.networkLogout: '读取本机实际在线账号，先解除设备绑定，再注销该账号的网络会话；连续确认离线后才重连',
     Stage.networkReconnect: '关闭再开启 Wi-Fi，重新连接 Student 并返回本页，无需等待“需要登录”提示。应用会通过学校接口连续确认已离线，再登录当前学生；不要在网页手动登录，最多等待 3 分钟',
     Stage.networkLogin: '重新读取当前接入点认证参数、获取挑战值，使用独立校园网密码登录',
@@ -71,7 +77,7 @@ class _FlowProgressPageState extends State<FlowProgressPage> {
     Stage.opening: '再次查询课程状态，确认仍可签到',
     Stage.filling: '核对课程签到方式；需要验证码时检查四位数字',
     Stage.submitting: 'POST /attendanceStudent/updateStuAttendance · 提交一次',
-    Stage.verifying: '重新查询课程，确认服务器记录',
+    Stage.verifying: '先等待 5 秒再查询签到记录；尚未同步时每隔 5 秒查询一次，最多查询 5 次',
     Stage.cleaning: '退出教务与 CAS 会话，清除本轮身份',
   };
 
@@ -217,7 +223,9 @@ class _FlowProgressPageState extends State<FlowProgressPage> {
       if (work != null && !result.success) {
         final failed = _step(work);
         if (failed != null) {
-          failed.status = StepStatus.failed;
+          failed.status = result.code == 'UNKNOWN'
+              ? StepStatus.warning
+              : StepStatus.failed;
           failed.finishedAt = DateTime.now();
           failed.detail = result.message;
         }
@@ -320,6 +328,8 @@ class _FlowProgressPageState extends State<FlowProgressPage> {
                                       ? '进行中 · ${stageLabels[_active] ?? '正在准备'}'
                                       : result.success
                                       ? '成功 · ${result.message}'
+                                      : result.code == 'UNKNOWN'
+                                      ? '待确认 · ${result.message}'
                                       : '已停止 · ${result.message}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,

@@ -8,6 +8,8 @@ import 'account_store.dart';
 import 'api_provider.dart';
 import 'domain.dart';
 import 'campus_network.dart';
+import 'enterprise_network.dart';
+import 'network_settings_dialog.dart';
 import 'flow_progress_page.dart';
 import 'portable_archive.dart';
 import 'timetable.dart';
@@ -55,7 +57,8 @@ class AttendanceAssistant extends StatelessWidget {
       store: store ?? SecureAccountStore(),
       providerFactory:
           providerFactory ??
-          () => NetworkAttendanceProvider(ApiAttendanceProvider()),
+          () => AdaptiveNetworkProvider(ApiAttendanceProvider()),
+      enableNetworkSettings: providerFactory == null,
       archiveBridge: archiveBridge ?? AndroidArchiveBridge(),
       timetableStore:
           timetableStore ??
@@ -67,6 +70,7 @@ class AttendanceAssistant extends StatelessWidget {
 }
 
 class HomePage extends StatefulWidget {
+  final bool enableNetworkSettings;
   final AccountStore store;
   final AttendanceProvider Function() providerFactory;
   final ArchiveBridge archiveBridge;
@@ -75,6 +79,7 @@ class HomePage extends StatefulWidget {
   final DateTime Function() clock;
   const HomePage({
     super.key,
+    this.enableNetworkSettings = false,
     required this.store,
     required this.providerFactory,
     required this.archiveBridge,
@@ -92,6 +97,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final List<String> _events = [];
   bool _loading = true, _saving = false, _busy = false;
   String? _storageError;
+  String _networkMode = 'student5g';
   late final TimetableController _timetables;
   late final Timer _clockTimer;
   @override
@@ -107,6 +113,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       (_) => _refreshView(),
     );
     _load();
+    if (widget.enableNetworkSettings) _loadNetworkMode();
+  }
+
+  Future<void> _loadNetworkMode() async {
+    try {
+      final settings = await AndroidEnterpriseTransport().preferences();
+      if (mounted) {
+        setState(
+          () => _networkMode = settings['mode'] as String? ?? 'student5g',
+        );
+      }
+    } on PlatformException catch (_) {}
+  }
+
+  Future<void> _networkSettings() async {
+    if (_busy || _saving) return;
+    final mode = await showDialog<String>(
+      context: context,
+      builder: (_) => NetworkSettingsDialog(mode: _networkMode),
+    );
+    if (mounted && mode != null) setState(() => _networkMode = mode);
   }
 
   Future<void> _load() async {
@@ -511,6 +538,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             PopupMenuButton<String>(
               enabled: !_busy,
               onSelected: (value) {
+                if (value == 'network') _networkSettings();
                 if (value == 'exit') {
                   _exit();
                 }
@@ -536,9 +564,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   );
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'log', child: Text('运行记录')),
-                PopupMenuItem(value: 'exit', child: Text('清空验证码并退出')),
+              itemBuilder: (_) => [
+                if (widget.enableNetworkSettings)
+                  const PopupMenuItem(value: 'network', child: Text('校园网方式')),
+                const PopupMenuItem(value: 'log', child: Text('运行记录')),
+                const PopupMenuItem(value: 'exit', child: Text('清空验证码并退出')),
               ],
             ),
           ],
@@ -618,21 +648,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             ),
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.wifi,
                                 size: 20,
                                 color: Color(0xFF193C9B),
                               ),
-                              SizedBox(width: 8),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  '签到时请连接 Student Wi-Fi，请勿使用 Student-5G',
-                                  style: TextStyle(height: 1.5),
+                                  _networkMode == 'student'
+                                      ? '当前使用 Student 旧版切换；该网络可能无法通过签到校验'
+                                      : '签到优先使用 Student-5G；切换账号需系统确认或手动修改网络配置',
+                                  style: const TextStyle(height: 1.5),
                                 ),
                               ),
                             ],

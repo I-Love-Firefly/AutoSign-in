@@ -26,9 +26,11 @@ class MainActivity : FlutterActivity() {
     private val aad = "XMUM_ACCOUNT_ARCHIVE_V1".toByteArray(StandardCharsets.UTF_8)
     private var pending: MethodChannel.Result? = null
     private var pendingBytes: ByteArray? = null
+    private lateinit var enterprise: EnterpriseNetworkChannel
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        enterprise = EnterpriseNetworkChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         CampusNetworkChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
@@ -165,6 +167,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (enterprise.onResult(requestCode, resultCode, data)) return
         if (requestCode != saveRequest && requestCode != openRequest) return
         val callback = pending ?: return
         pending = null
@@ -199,5 +202,10 @@ class MainActivity : FlutterActivity() {
             pendingBytes?.fill(0)
             pendingBytes = null
         }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        enterprise.onPermissions(requestCode)
     }
 }

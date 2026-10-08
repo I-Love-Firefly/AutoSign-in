@@ -11,7 +11,7 @@ import 'package:attendance_assistant/flow_progress_page.dart';
 import 'package:attendance_assistant/portable_archive.dart';
 import 'package:attendance_assistant/timetable.dart';
 
-import 'domain_test.dart' show FakeProvider;
+import 'domain_test.dart' show FakeProvider, course;
 import 'timetable_test.dart' as timetable_fixture;
 
 class MemoryStore implements AccountStore {
@@ -60,7 +60,7 @@ void main() {
       expect(lesson, findsOneWidget);
       expect(t.widget<Text>(lesson).style?.color, const Color(0xFF18733C));
       expect(find.text('TEST-001'), findsOneWidget);
-      expect(find.text('签到时请连接 Student Wi-Fi，请勿使用 Student-5G'), findsOneWidget);
+      expect(find.text('签到优先使用 Student-5G；切换账号需系统确认或手动修改网络配置'), findsOneWidget);
       current = DateTime.parse('2026-10-06T19:00:00+08:00');
       await t.pump(const Duration(seconds: 30));
       expect(lesson, findsNothing);
@@ -238,6 +238,49 @@ void main() {
       expect(find.text('返回列表'), findsOneWidget);
     },
   );
+
+  testWidgets('submitted but unconfirmed record is shown as pending', (
+    t,
+  ) async {
+    final today = DateTime.now().toUtc().add(const Duration(hours: 8));
+    final provider = FakeProvider()
+      ..confirmed = false
+      ..list = [
+        course({
+          'arrangeDate': today.toIso8601String().split('T').first,
+          'startClassTime': '00:00:00',
+          'endClassTime': '23:59:59',
+          'attendanceMethod': '1',
+        }),
+      ];
+    await t.pumpWidget(
+      MaterialApp(
+        home: FlowProgressPage(
+          account: const Account('测试学生', 'EXAMPLE', 'dummy'),
+          code: '',
+          inspectOnly: false,
+          providerFactory: () => provider,
+        ),
+      ),
+    );
+    await t.pumpAndSettle();
+    final scroll = t.widget<ListView>(find.byType(ListView)).controller!;
+    scroll.jumpTo(0);
+    await t.pumpAndSettle();
+    expect(find.textContaining('待确认 · 签到已提交'), findsOneWidget);
+    expect(find.textContaining('已停止 ·'), findsNothing);
+    scroll.jumpTo(scroll.position.maxScrollExtent);
+    await t.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('flow-verifying')),
+        matching: find.text('警告'),
+      ),
+      findsOneWidget,
+    );
+    expect(provider.submissions, 1);
+    expect(provider.closes, 1);
+  });
 
   testWidgets('cleanup failure is shown on cleanup step instead of hanging', (
     t,

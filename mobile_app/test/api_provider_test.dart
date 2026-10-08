@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -21,6 +22,7 @@ class ScriptedTransport implements SessionTransport {
   dynamic acknowledgement = true;
   String? rejection;
   int? syncHttpStatus;
+  int pendingReads = 0;
   @override
   Future<HttpReply> send(
     Uri uri, {
@@ -55,9 +57,10 @@ class ScriptedTransport implements SessionTransport {
     } else if (uri.path.endsWith('/selectCurrentXnXq')) {
       data = {'semester': '2026/09'};
     } else if (uri.path.endsWith('/query/opt')) {
+      final recordSigned = signed && pendingReads-- <= 0;
       data = {
         'records': [
-          course({'attendanceStatus': signed ? '1' : '0'}).data,
+          course({'attendanceStatus': recordSigned ? '1' : '0'}).data,
         ],
         'total': 1,
       };
@@ -91,6 +94,67 @@ class ScriptedTransport implements SessionTransport {
 }
 
 void main() {
+  test(
+    'verification waits before first read and tolerates delayed records',
+    () async {
+      final t = ScriptedTransport();
+      final gate = Completer<void>();
+      final waits = <Duration>[];
+      final p = ApiAttendanceProvider(
+        transport: t,
+        clock: () => now,
+        wait: (duration) {
+          waits.add(duration);
+          return gate.future;
+        },
+      );
+      await p.login(account, (_) {});
+      await p.submit(course(), '1234');
+      t.pendingReads = 2;
+      final before = t.calls.length;
+      final result = p.verify(course());
+      expect(t.calls.length, before);
+      expect(waits, [const Duration(seconds: 5)]);
+      gate.complete();
+      expect(await result, isTrue);
+      expect(waits, List.filled(3, const Duration(seconds: 5)));
+      expect(t.calls.where((c) => c.uri.path.endsWith('/query/opt')).length, 3);
+      expect(
+        t.calls
+            .where((c) => c.uri.path.endsWith('/updateStuAttendance'))
+            .length,
+        1,
+      );
+      await p.close();
+    },
+  );
+  test(
+    'unpropagated record stops after five reads without resubmitting',
+    () async {
+      final t = ScriptedTransport();
+      final waits = <Duration>[];
+      final p = ApiAttendanceProvider(
+        transport: t,
+        clock: () => now,
+        wait: (duration) async {
+          waits.add(duration);
+        },
+      );
+      await p.login(account, (_) {});
+      await p.submit(course(), '1234');
+      t.pendingReads = 10;
+      expect(await p.verify(course()), isFalse);
+      expect(waits, List.filled(5, const Duration(seconds: 5)));
+      expect(t.calls.where((c) => c.uri.path.endsWith('/query/opt')).length, 5);
+      expect(
+        t.calls
+            .where((c) => c.uri.path.endsWith('/updateStuAttendance'))
+            .length,
+        1,
+      );
+      await p.close();
+    },
+  );
   test('network attendance omits quickResponse and verifies record', () async {
     final t = ScriptedTransport();
     final p = ApiAttendanceProvider(transport: t, clock: () => now);

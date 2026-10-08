@@ -4,6 +4,8 @@
 
 应用版本、使用方式、开发命令与已知限制见 [mobile_app/README.md](mobile_app/README.md)。接口依据见 [mobile_app/API_NOTES.md](mobile_app/API_NOTES.md) 和 [AC 登录接口记录](docs/ac-login-api.md)。
 
+当前版本 **0.7.4**：支持 Student-5G 企业网络账号切换及 Student 网页认证流程；签到提交后等待学校记录同步再核验，暂未确认时显示“待确认”，不自动重发签到。
+
 ## 开发
 
 安装 Flutter SDK 和 Android 开发环境，在 `mobile_app` 下执行：

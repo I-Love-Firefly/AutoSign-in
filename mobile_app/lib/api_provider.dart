@@ -182,6 +182,7 @@ String encryptCasPassword(String password) {
 class ApiAttendanceProvider implements AttendanceProvider {
   final SessionTransport transport;
   final DateTime Function() clock;
+  final Future<void> Function(Duration) wait;
   Map<String, dynamic> _user = {};
   final List<String> _secrets = [];
   String? _tgt;
@@ -189,8 +190,10 @@ class ApiAttendanceProvider implements AttendanceProvider {
   ApiAttendanceProvider({
     SessionTransport? transport,
     DateTime Function()? clock,
+    Future<void> Function(Duration)? wait,
   }) : transport = transport ?? IsolatedHttpSession(),
-       clock = clock ?? DateTime.now;
+       clock = clock ?? DateTime.now,
+       wait = wait ?? ((duration) => Future<void>.delayed(duration));
   static final base = Uri.parse('https://acad.xmu.edu.my/mobile/');
   static const service = 'https://acad.xmu.edu.my/mobile/shiro-cas';
   static const queryPath = 'api/jwxt-ktkq/mobile/attendanceStudent/query/opt';
@@ -444,14 +447,13 @@ class ApiAttendanceProvider implements AttendanceProvider {
 
   @override
   Future<bool> verify(Course course) async {
-    // Read-only verification may retry once; never retry the mutation.
-    for (var i = 0; i < 2; i++) {
+    // Allow the school record to propagate before the first read and each poll.
+    // Only re-read the record; never repeat the attendance submission.
+    for (var i = 0; i < 5; i++) {
+      await wait(const Duration(seconds: 5));
       final found = (await courses()).where((c) => c.id == course.id).toList();
       if (found.length == 1 && found.single.signed) {
         return true;
-      }
-      if (i == 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 800));
       }
     }
     return false;

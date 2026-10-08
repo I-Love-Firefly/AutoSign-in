@@ -3,6 +3,9 @@ import 'dart:async';
 enum Stage {
   idle,
   networkChecking,
+  networkConfiguring,
+  networkApproval,
+  networkEnterpriseReconnect,
   networkLogout,
   networkReconnect,
   networkLogin,
@@ -28,7 +31,10 @@ enum Stage {
 
 const stageLabels = {
   Stage.idle: '等待选择账号',
-  Stage.networkChecking: '检查校园网认证状态',
+  Stage.networkChecking: '检查校园网准备状态',
+  Stage.networkConfiguring: '准备 Student-5G 账号配置',
+  Stage.networkApproval: '等待系统确认 Student-5G 配置',
+  Stage.networkEnterpriseReconnect: '等待 Student-5G 重新认证',
   Stage.networkLogout: '注销当前校园网账号',
   Stage.networkReconnect: '等待重连并重新认证 Student Wi-Fi',
   Stage.networkLogin: '登录学生校园网账号',
@@ -46,7 +52,7 @@ const stageLabels = {
   Stage.opening: '正在核对课程',
   Stage.filling: '核对签到方式与到场声明',
   Stage.submitting: '正在提交签到',
-  Stage.verifying: '正在核验服务器记录',
+  Stage.verifying: '等待学校同步并核验签到记录',
   Stage.cleaning: '正在清理账号会话',
   Stage.success: '已完成',
   Stage.failed: '流程已停止',
@@ -221,17 +227,22 @@ class AttendanceOrchestrator {
       verifying = true;
       progress(Stage.verifying);
       if (!await provider.verify(fresh)) {
-        throw const AttendanceError('UNKNOWN', '结果未确认，请在学校页面核验后再决定是否重试');
+        throw const AttendanceError(
+          'UNKNOWN',
+          '签到已提交，学校记录暂未确认，请在学校页面核验后再决定是否重试',
+        );
       }
       return RunResult(true, 'SUCCESS', '签到成功', course: fresh, submitted: true);
     } on AttendanceError catch (e) {
       if (submitted &&
           (verifying ||
               !const ['SERVER_REJECTED', 'CLASS_CHANGED'].contains(e.code))) {
-        return const RunResult(
+        return RunResult(
           false,
           'UNKNOWN',
-          '结果未确认，请在学校页面核验后再决定是否重试',
+          verifying
+              ? '签到已提交，学校记录暂未确认，请在学校页面核验后再决定是否重试'
+              : '结果未确认，请在学校页面核验后再决定是否重试',
           submitted: true,
         );
       }

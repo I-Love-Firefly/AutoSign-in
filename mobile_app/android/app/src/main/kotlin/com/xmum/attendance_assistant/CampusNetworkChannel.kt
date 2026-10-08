@@ -144,6 +144,8 @@ class CampusNetworkChannel(private val activity: Activity, messenger: BinaryMess
                             }
                             require(selected != null && address != null) { "未检测到稳定的新 Wi-Fi 连接。请关闭再开启 Wi-Fi、连接 Student 并返回应用；无需等待需要登录提示，应用会通过学校接口复核账号已离线" }
                             require(address!!.startsWith("10.")) { "重连后网络不属于已核验的校园网络，请选择 Student" }
+                            @Suppress("DEPRECATION") val ssid = activity.applicationContext.getSystemService(android.net.wifi.WifiManager::class.java).connectionInfo.ssid?.trim('"')
+                            require(ssid == "Student") { "Student旧版流程请连接Student；Student-5G需选择企业网络切换方式" }
                             require(manager.bindProcessToNetwork(selected)) { "无法固定请求到重连后的 Wi-Fi" }
                             wifi = selected
                             ip = address
