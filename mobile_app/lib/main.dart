@@ -322,18 +322,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _importAccounts() async {
     if (_busy || _saving || _storageError != null) return;
     setState(() => _saving = true);
+    var phase = '选择文件';
     try {
       final archive = await widget.archiveBridge.open();
       if (archive == null || !mounted) return;
       if (archive.length > PortableAccounts.maxBytes) {
         throw const FormatException('账号文件过大');
       }
+      phase = '输入传输密码';
       final passphrase = await showDialog<String>(
         context: context,
         builder: (_) => const ArchivePasswordDialog(exporting: false),
       );
       if (passphrase == null || !mounted) return;
+      phase = '解密文件';
       final plaintext = await widget.archiveBridge.decrypt(archive, passphrase);
+      phase = '解析账号';
       late final List<Account> incoming;
       try {
         incoming = PortableAccounts.decode(plaintext);
@@ -345,6 +349,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return;
       }
       if (!mounted) return;
+      phase = '检查导入内容';
       final plan = PortableAccounts.plan(_accounts, incoming);
       final mode = await showDialog<ImportMode>(
         context: context,
@@ -375,6 +380,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
       if (mode == null || !mounted) return;
       final merged = plan.apply(_accounts, mode);
+      phase = '保存账号';
       await widget.store.save(merged);
       if (mounted) {
         setState(() => _accounts = merged);
@@ -385,8 +391,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _notice(error.message);
     } on PlatformException catch (error) {
       _notice(error.message ?? '导入失败，请检查文件和传输密码');
-    } catch (_) {
-      _notice('导入失败，原账号未被修改');
+    } catch (error, stack) {
+      // Types and code locations identify programming errors without logging
+      // file contents, account data, passwords, or exception values.
+      debugPrint(
+        'Account import failed at $phase (${error.runtimeType})\n$stack',
+      );
+      _notice('导入失败（$phase / ${error.runtimeType}），请重试；原账号未被修改');
     } finally {
       if (mounted) setState(() => _saving = false);
     }

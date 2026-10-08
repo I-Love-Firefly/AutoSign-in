@@ -25,6 +25,8 @@ void main() {
       expect(utf8.decode(first), isNot(contains('not-a-real-password')));
       final roundTrip = await bridge.decrypt(first, passphrase);
       expect(PortableAccounts.decode(roundTrip).single.campusId, 'DUMMY-001');
+      roundTrip.fillRange(0, roundTrip.length, 0);
+      expect(roundTrip.every((byte) => byte == 0), isTrue);
       await expectLater(
         bridge.decrypt(first, 'incorrect-transfer-passphrase'),
         throwsA(

@@ -1,11 +1,40 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:attendance_assistant/domain.dart';
 import 'package:attendance_assistant/portable_archive.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test('native decrypt reply can be cleared when platform buffer is read-only', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMessageHandler(AndroidArchiveBridge.channel.name, (
+      message,
+    ) async {
+      final payload = PortableAccounts.encode([
+        const Account('Fixture', 'DUMMY-001', 'fictional-password'),
+      ]);
+      // The Flutter engine wraps incoming platform messages as read-only data.
+      return const StandardMethodCodec()
+          .encodeSuccessEnvelope(payload)
+          .asUnmodifiableView();
+    });
+    addTearDown(
+      () => messenger.setMockMessageHandler(
+        AndroidArchiveBridge.channel.name,
+        null,
+      ),
+    );
+    final plaintext = await AndroidArchiveBridge().decrypt(
+      Uint8List(0),
+      'fictional-transfer-password',
+    );
+    expect(PortableAccounts.decode(plaintext).single.campusId, 'DUMMY-001');
+    plaintext.fillRange(0, plaintext.length, 0);
+    expect(plaintext.every((value) => value == 0), isTrue);
+  });
   test('AC password is optional and survives portable archive and merges', () {
     const complete = Account(
       'Test',

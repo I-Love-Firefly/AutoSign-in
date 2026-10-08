@@ -23,10 +23,14 @@ class AndroidArchiveBridge implements ArchiveBridge {
 
   @override
   Future<Uint8List> decrypt(Uint8List archive, String passphrase) async =>
-      (await channel.invokeMethod<Uint8List>('decrypt', {
-        'bytes': archive,
-        'password': passphrase,
-      }))!;
+      // Platform message buffers can be read-only. Own the plaintext buffer so
+      // the importer can clear it after decoding, including on parse failures.
+      Uint8List.fromList(
+        (await channel.invokeMethod<Uint8List>('decrypt', {
+          'bytes': archive,
+          'password': passphrase,
+        }))!,
+      );
 
   @override
   Future<bool> save(Uint8List archive, String filename) async =>
