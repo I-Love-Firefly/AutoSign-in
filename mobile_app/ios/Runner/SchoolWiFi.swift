@@ -28,7 +28,7 @@ final class SchoolWiFi: NSObject, CLLocationManagerDelegate {
   private let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
   private let location = CLLocationManager()
   private var generation = 1
-  private var lastPathStatus: NWPath.Status?
+  private var lastPathStatus: Network.NWPath.Status?
   private var lastIdentity: String?
   private var permissionResult: FlutterResult?
   private var permissionTimer: Timer?
