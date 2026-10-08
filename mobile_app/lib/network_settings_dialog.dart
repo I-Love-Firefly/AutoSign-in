@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import 'enterprise_network.dart';
 
@@ -15,6 +16,8 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
   String phase2 = 'MSCHAPV2';
   String? error;
   bool busy = false;
+  bool get isIos => defaultTargetPlatform == TargetPlatform.iOS;
+  bool automaticSupported = true;
   @override
   void initState() {
     super.initState();
@@ -23,9 +26,12 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
 
   Future<void> load() async {
     try {
-      final p = await AndroidEnterpriseTransport().preferences();
+      final p = await NativeEnterpriseTransport().preferences();
       if (mounted) {
-        setState(() => phase2 = p['phase2'] == 'GTC' ? 'GTC' : 'MSCHAPV2');
+        setState(() {
+          phase2 = p['phase2'] == 'GTC' ? 'GTC' : 'MSCHAPV2';
+          automaticSupported = p['automaticSupported'] != false;
+        });
       }
     } on PlatformException catch (_) {}
   }
@@ -36,7 +42,7 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
       error = null;
     });
     try {
-      await AndroidEnterpriseTransport.saveSettings(mode, phase2);
+      await NativeEnterpriseTransport.saveSettings(mode, phase2);
       if (mounted) Navigator.pop(context, mode);
     } on PlatformException catch (e) {
       if (mounted) {
@@ -84,36 +90,43 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
             const SizedBox(height: 12),
             Text(
               mode == 'student5g'
-                  ? '应用填写当前学生的配置，你在系统页面确认；重新连接并核验账号后继续。需要 Android 11 或以上。'
+                  ? isIos
+                        ? '应用申请更新 Student-5G 配置，你在 iPhone 系统提示中确认；连接稳定并经学校核验账号后继续。'
+                        : '应用填写当前学生的配置，你在系统页面确认；重新连接并核验账号后继续。需要 Android 11 或以上。'
                   : mode == 'manual5g'
-                  ? '在系统设置修改 Student-5G 的身份和密码，断开重连后返回；应用核验账号后继续。'
+                  ? '打开系统“设置 → Wi-Fi”，修改 Student-5G 的身份和密码，断开重连后返回；应用核验账号后继续。'
                   : '使用之前的 Student 网页认证切换。连接成功不保证签到系统认可此网络。',
             ),
+            if (!automaticSupported && mode == 'student5g')
+              const Text('当前系统或认证设置不支持自动配置，请选择手动切换。'),
             const SizedBox(height: 8),
             const Text('使用账号中的“校园网密码”，无需每个学生分别设置认证参数。'),
-            ExpansionTile(
-              title: const Text('共用认证设置'),
-              children: [
-                const Text('PEAP · 系统可信证书 · xmu.edu.my'),
-                DropdownButtonFormField<String>(
-                  key: ValueKey(phase2),
-                  initialValue: phase2,
-                  decoration: const InputDecoration(labelText: '第二阶段认证'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'MSCHAPV2',
-                      child: Text('MSCHAPV2'),
-                    ),
-                    DropdownMenuItem(value: 'GTC', child: Text('GTC')),
-                  ],
-                  onChanged: busy
-                      ? null
-                      : (v) {
-                          if (v != null) setState(() => phase2 = v);
-                        },
-                ),
-              ],
-            ),
+            if (!isIos)
+              ExpansionTile(
+                title: const Text('共用认证设置'),
+                children: [
+                  const Text('PEAP · 系统可信证书 · xmu.edu.my'),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(phase2),
+                    initialValue: phase2,
+                    decoration: const InputDecoration(labelText: '第二阶段认证'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'MSCHAPV2',
+                        child: Text('MSCHAPV2'),
+                      ),
+                      DropdownMenuItem(value: 'GTC', child: Text('GTC')),
+                    ],
+                    onChanged: busy
+                        ? null
+                        : (v) {
+                            if (v != null) setState(() => phase2 = v);
+                          },
+                  ),
+                ],
+              ),
+            if (isIos)
+              const Text('系统确认使用 PEAP 和学校服务器证书域名校验。需要 GTC 或学校描述文件时，请使用手动切换。'),
             if (error != null)
               Text(error!, style: const TextStyle(color: Colors.red)),
           ],

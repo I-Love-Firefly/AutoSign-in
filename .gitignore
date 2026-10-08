@@ -4,8 +4,11 @@
 !/README.md
 !/mobile_app/
 !/docs/
+!/.github/
 /docs/*
 !/docs/ac-login-api.md
+!/docs/ios-adaptation.md
+!/docs/windows-iphone-install.md
 /mobile_app/VALIDATION.md
 
 # Local credentials, account archives, signing material and binaries.
@@ -19,5 +22,8 @@
 *.pem
 *.apk
 *.aab
+*.ipa
+*.mobileprovision
+*.xcarchive/
 key.properties
 local.properties

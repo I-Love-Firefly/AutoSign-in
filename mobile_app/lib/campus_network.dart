@@ -15,7 +15,7 @@ abstract class CampusTransport {
   Future<void> release();
 }
 
-class AndroidCampusTransport implements CampusTransport {
+class NativeCampusTransport implements CampusTransport {
   static const channel = MethodChannel('com.xmum.attendance_assistant/network');
   @override
   Future<String> bind() async =>
@@ -59,6 +59,8 @@ class AndroidCampusTransport implements CampusTransport {
   @override
   Future<void> release() => channel.invokeMethod<void>('release');
 }
+
+typedef AndroidCampusTransport = NativeCampusTransport;
 
 class CampusSessionReport {
   final String deviceIp;

@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import 'campus_network.dart';
 import 'domain.dart';
@@ -14,7 +15,7 @@ abstract class EnterpriseTransport {
   Future<void> checkLegacy() async {}
 }
 
-class AndroidEnterpriseTransport implements EnterpriseTransport {
+class NativeEnterpriseTransport implements EnterpriseTransport {
   static const channel = MethodChannel(
     'com.xmum.attendance_assistant/enterprise',
   );
@@ -47,6 +48,24 @@ class AndroidEnterpriseTransport implements EnterpriseTransport {
   Future<Map<String, dynamic>> state() => _map('state');
   @override
   Future<void> release() => channel.invokeMethod('release');
+}
+
+// Keep the previous public name for existing Android integrations.
+typedef AndroidEnterpriseTransport = NativeEnterpriseTransport;
+
+bool confirmedEnterpriseConnection(
+  Map<String, dynamic> link,
+  int previous, {
+  required bool manual,
+}) {
+  if (link['handle'] is! num || (link['handle'] as num) < 0) return false;
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    // iOS exposes no Android network handle. Native code reports a real
+    // configuration approval or an observed trip to Settings instead.
+    return link['evidence'] ==
+        (manual ? 'ios-settings-return' : 'ios-system-approved');
+  }
+  return link['handle'] != previous;
 }
 
 class Student5gNetwork {
@@ -91,7 +110,7 @@ class Student5gNetwork {
         !ip.startsWith('10.') ||
         link['ssid'] != 'Student-5G' ||
         link['enterprise'] != true ||
-        link['handle'] == previous) {
+        !confirmedEnterpriseConnection(link, previous, manual: manual)) {
       throw const AttendanceError(
         'ENTERPRISE_CONNECTION',
         '未确认新的 Student-5G 企业网络连接，已停止',
@@ -159,8 +178,8 @@ class AdaptiveNetworkProvider
     EnterpriseTransport? enterprise,
     CampusTransport? campus,
     this.identityPollInterval = const Duration(seconds: 1),
-  }) : enterprise = enterprise ?? AndroidEnterpriseTransport(),
-       campus = campus ?? AndroidCampusTransport();
+  }) : enterprise = enterprise ?? NativeEnterpriseTransport(),
+       campus = campus ?? NativeCampusTransport();
   @override
   Future<void> login(Account account, void Function(Stage) progress) async {
     try {

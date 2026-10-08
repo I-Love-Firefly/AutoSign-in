@@ -59,7 +59,7 @@ class AttendanceAssistant extends StatelessWidget {
           providerFactory ??
           () => AdaptiveNetworkProvider(ApiAttendanceProvider()),
       enableNetworkSettings: providerFactory == null,
-      archiveBridge: archiveBridge ?? AndroidArchiveBridge(),
+      archiveBridge: archiveBridge ?? NativeArchiveBridge(),
       timetableStore:
           timetableStore ??
           (store == null ? SecureTimetableStore() : MemoryTimetableStore()),
@@ -118,7 +118,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _loadNetworkMode() async {
     try {
-      final settings = await AndroidEnterpriseTransport().preferences();
+      final settings = await NativeEnterpriseTransport().preferences();
       if (mounted) {
         setState(
           () => _networkMode = settings['mode'] as String? ?? 'student5g',
@@ -438,7 +438,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _inspectNetworkSessions(Account account) async {
     if (_busy || _saving || _timetables.running) return;
     setState(() => _busy = true);
-    final transport = AndroidCampusTransport();
+    final transport = NativeCampusTransport();
     Future<CampusSessionReport> query() async {
       try {
         return await CampusNetwork(transport).inspectSessions(account);
@@ -1068,7 +1068,7 @@ class _AccountEditorState extends State<AccountEditor> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              '仅录入本人或已获授权的账号。密码由 Android 安全存储加密保存。',
+              '仅录入本人或已获授权的账号。密码由手机系统安全存储保护。',
               style: TextStyle(fontSize: 13, color: Colors.black54),
             ),
             const SizedBox(height: 18),

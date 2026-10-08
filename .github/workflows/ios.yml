@@ -1,0 +1,70 @@
+name: iOS checks
+on:
+  push:
+    branches: [main, 'codex/iphone-*']
+    paths: ['mobile_app/**', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['mobile_app/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: mobile_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter config --enable-swift-package-manager
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze
+      - run: flutter test
+      - name: Compile unsigned simulator app
+        run: |
+          if ! flutter build ios --simulator --debug --verbose > "$RUNNER_TEMP/ios-build.log" 2>&1; then
+            python3 -c 'import os,re; p=os.environ["RUNNER_TEMP"]+"/ios-build.log"; print("\n".join(x.rstrip() for x in open(p) if re.search(r"error:|Error \(Xcode\):|warning:|\.swift:[0-9]+",x)))'
+            tail -n 40 "$RUNNER_TEMP/ios-build.log"
+            exit 1
+          fi
+          tail -n 15 "$RUNNER_TEMP/ios-build.log"
+      - name: Test native archive compatibility on simulator
+        timeout-minutes: 8
+        run: |
+          SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for v in d["devices"].values() for x in v if x["name"].startswith("iPhone")))')
+          xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -parallel-testing-enabled NO -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 30 \
+            -maximum-test-execution-time-allowance 60 \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Compile unsigned iPhone package
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p build/ios/unsigned/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/unsigned/Payload/
+          cd build/ios/unsigned
+          zip -qry ../AutoSign-in-iPhone-unsigned.ipa Payload
+          cp ../../../ios/Runner/Runner.entitlements ../Required-entitlements.plist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iPhone-unsigned-needs-developer-signing
+          path: |
+            mobile_app/build/ios/AutoSign-in-iPhone-unsigned.ipa
+            mobile_app/build/ios/Required-entitlements.plist
+            docs/windows-iphone-install.md
+            docs/ios-adaptation.md
+          if-no-files-found: error
+          retention-days: 14

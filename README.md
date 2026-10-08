@@ -1,6 +1,8 @@
 # AutoSign-in
 
-厦门大学马来西亚分校签到助手：Flutter Android 应用，支持账号安全存储、校园网认证切换、课程查询、签到结果核验、AC 系统课表和加密账号导入导出。
+厦门大学马来西亚分校签到助手：Flutter Android / iOS 应用源码，支持账号安全存储、校园网认证切换、课程查询、签到结果核验、AC 系统课表和加密账号导入导出。
+
+iPhone 适配说明与 Mac 安装步骤见 [iOS 适配文档](docs/ios-adaptation.md)。iOS 工程面向 iOS 15 或以上，需要 Xcode 和对应开发者签名；校园 Wi-Fi 切换及实际签到仍需在校园 iPhone 上验收。
 
 应用版本、使用方式、开发命令与已知限制见 [mobile_app/README.md](mobile_app/README.md)。接口依据见 [mobile_app/API_NOTES.md](mobile_app/API_NOTES.md) 和 [AC 登录接口记录](docs/ac-login-api.md)。
 

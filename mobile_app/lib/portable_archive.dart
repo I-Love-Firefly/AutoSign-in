@@ -11,7 +11,7 @@ abstract interface class ArchiveBridge {
   Future<Uint8List?> open();
 }
 
-class AndroidArchiveBridge implements ArchiveBridge {
+class NativeArchiveBridge implements ArchiveBridge {
   static const channel = MethodChannel('com.xmum.attendance_assistant/archive');
 
   @override
@@ -43,6 +43,8 @@ class AndroidArchiveBridge implements ArchiveBridge {
   @override
   Future<Uint8List?> open() => channel.invokeMethod<Uint8List>('open');
 }
+
+typedef AndroidArchiveBridge = NativeArchiveBridge;
 
 enum ImportMode { addOnly, updateDuplicates }
 

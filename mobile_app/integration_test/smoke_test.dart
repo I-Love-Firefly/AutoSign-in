@@ -28,8 +28,13 @@ class OfflineProvider implements AttendanceProvider {
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  testWidgets('Android encrypted storage and account interaction', (t) async {
+  testWidgets('mobile secure storage and account interaction', (t) async {
     const storage = FlutterSecureStorage(
+      iOptions: IOSOptions(
+        accountName: 'attendance_qa_only',
+        accessibility: KeychainAccessibility.unlocked_this_device,
+        synchronizable: false,
+      ),
       aOptions: AndroidOptions(
         storageNamespace: 'attendance_qa_only',
         resetOnError: false,
@@ -66,6 +71,11 @@ void main() {
       expect(find.text('设备测试账号'), findsOneWidget);
       final restored = await SecureAccountStore(
         storage: const FlutterSecureStorage(
+          iOptions: IOSOptions(
+            accountName: 'attendance_qa_only',
+            accessibility: KeychainAccessibility.unlocked_this_device,
+            synchronizable: false,
+          ),
           aOptions: AndroidOptions(
             storageNamespace: 'attendance_qa_only',
             resetOnError: false,
@@ -74,10 +84,7 @@ void main() {
       ).load();
       expect(restored.single.campusId, 'DEVICE-TEST');
       expect(restored.single.password, 'temporary-offline-test');
-      await t.enterText(
-        find.byKey(const ValueKey('attendance-code')),
-        '1234',
-      );
+      await t.enterText(find.byKey(const ValueKey('attendance-code')), '1234');
       await t.pumpAndSettle();
       await t.scrollUntilVisible(
         find.text('设备测试账号'),
