@@ -41,10 +41,14 @@ jobs:
           fi
           tail -n 15 "$RUNNER_TEMP/ios-build.log"
       - name: Test native archive compatibility on simulator
+        timeout-minutes: 8
         run: |
           SIMULATOR_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for v in d["devices"].values() for x in v if x["name"].startswith("iPhone")))')
           xcodebuild test -workspace ios/Runner.xcworkspace -scheme Runner \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -parallel-testing-enabled NO -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 30 \
+            -maximum-test-execution-time-allowance 60 \
             CODE_SIGNING_ALLOWED=NO
       - name: Compile unsigned iPhone package
         run: |
