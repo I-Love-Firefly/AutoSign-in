@@ -48,7 +48,11 @@ class RunnerTests: XCTestCase {
   @MainActor
   func testClosedSessionStopsBeforeSendingAfterWiFiCheck() async throws {
     let gate = SuspendedBinding()
-    let http = SchoolHTTP(wifi: gate)
+    let http = SchoolHTTP(wifi: gate, makeConfiguration: {
+      let configuration = URLSessionConfiguration.ephemeral
+      configuration.protocolClasses = [RejectTestNetwork.self]
+      return configuration
+    })
     let request = Task {
       try await http.send(id: "cancel-test", url: URL(string: "https://acad.xmu.edu.my/")!,
                           method: "POST", body: "fictional-test-only", headers: [:],
@@ -80,4 +84,14 @@ private final class SuspendedBinding: SchoolBindingChecking {
       entered.fulfill()
     }
   }
+}
+
+// Even a regression must never send the fictional test POST to a live school.
+private final class RejectTestNetwork: URLProtocol {
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override func startLoading() {
+    client?.urlProtocol(self, didFailWithError: NSError(domain: "OfflineTests", code: 1))
+  }
+  override func stopLoading() {}
 }

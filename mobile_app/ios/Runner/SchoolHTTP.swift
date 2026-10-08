@@ -19,10 +19,15 @@ final class SchoolHTTP {
   }
   private let delegate = StopRedirects()
   private let wifi: any SchoolBindingChecking
+  private let makeConfiguration: () -> URLSessionConfiguration
   private var sessions: [String: Session] = [:]
   private let schoolHosts: Set<String> = ["cas.xmu.edu.my", "acad.xmu.edu.my", "ac.xmu.edu.my", "srun.xmu.edu.my"]
 
-  init(wifi: any SchoolBindingChecking) { self.wifi = wifi }
+  init(wifi: any SchoolBindingChecking,
+       makeConfiguration: @escaping () -> URLSessionConfiguration = { .ephemeral }) {
+    self.wifi = wifi
+    self.makeConfiguration = makeConfiguration
+  }
 
   func close(_ id: String) {
     guard let session = sessions.removeValue(forKey: id) else { return }
@@ -45,7 +50,7 @@ final class SchoolHTTP {
       }
       session = existing
     } else {
-      let config = URLSessionConfiguration.ephemeral
+      let config = makeConfiguration()
       config.allowsCellularAccess = !wifiOnly
       config.waitsForConnectivity = false
       config.timeoutIntervalForRequest = 25

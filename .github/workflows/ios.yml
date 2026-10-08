@@ -61,5 +61,6 @@ jobs:
             mobile_app/build/ios/AutoSign-in-iPhone-unsigned.ipa
             mobile_app/build/ios/Required-entitlements.plist
             docs/windows-iphone-install.md
+            docs/ios-adaptation.md
           if-no-files-found: error
           retention-days: 14
